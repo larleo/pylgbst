@@ -267,6 +267,8 @@ class MsgHubAttachedIO(UpstreamMsg):
     DEV_MOTOR_EXTERNAL_TACHO = 0x0026
     DEV_MOTOR_INTERNAL_TACHO = 0x0027
     DEV_TILT_INTERNAL = 0x0028
+    DEV_TECHNIC_MOTOR_L = 0x002E
+    DEV_TECHNIC_MOTOR_XL = 0x002F
 
     def __init__(self):
         super(MsgHubAttachedIO, self).__init__()

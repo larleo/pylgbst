@@ -13,6 +13,8 @@ PERIPHERAL_TYPES = {
     MsgHubAttachedIO.DEV_MOTOR: Motor,
     MsgHubAttachedIO.DEV_MOTOR_EXTERNAL_TACHO: EncodedMotor,
     MsgHubAttachedIO.DEV_MOTOR_INTERNAL_TACHO: EncodedMotor,
+    MsgHubAttachedIO.DEV_TECHNIC_MOTOR_L: EncodedMotor,
+    MsgHubAttachedIO.DEV_TECHNIC_MOTOR_XL: EncodedMotor,
     MsgHubAttachedIO.DEV_VISION_SENSOR: VisionSensor,
     MsgHubAttachedIO.DEV_RGB_LIGHT: LEDRGB,
     MsgHubAttachedIO.DEV_TILT_EXTERNAL: TiltSensor,
@@ -273,3 +275,104 @@ class MoveHub(Hub):
                 self.vision_sensor = self.peripherals[port]
             elif type(self.peripherals[port]) == EncodedMotor and port not in (self.PORT_A, self.PORT_B, self.PORT_AB):
                 self.motor_external = self.peripherals[port]
+
+
+
+class TechnicHub(Hub):
+    """
+    Class implementing Lego TechnicHub specifics
+
+    :type led: LEDRGB
+    :type button: Button
+    :type current: Current
+    :type voltage: Voltage
+    :type vision_sensor: pylgbst.peripherals.VisionSensor
+    :type port_A: Peripheral
+    :type port_B: Peripheral
+    :type port_C: Peripheral
+    :type port_D: Peripheral
+    :type motor_AB: EncodedMotor
+    """
+
+    # PORTS
+    PORT_A = 0x00
+    PORT_B = 0x01
+    PORT_C = 0x02
+    PORT_D = 0x03
+    PORT_AB = 0x10
+    PORT_LED = 0x32
+    PORT_CURRENT = 0x3B
+    PORT_VOLTAGE = 0x3C
+
+    # noinspection PyTypeChecker
+    def __init__(self, connection=None):
+        super(TechnicHub, self).__init__(connection)
+        self.info = {}
+
+        # shorthand fields
+        self.button = Button(self)
+        self.led = None
+        self.current = None
+        self.voltage = None
+        self.port_A = None
+        self.port_B = None
+        self.motor_AB = None
+        self.vision_sensor = None
+        self.port_C = None
+        self.port_D = None
+
+        self._wait_for_devices()
+        self._report_status()
+
+    def _wait_for_devices(self, get_dev_set=None):
+        if not get_dev_set:
+            get_dev_set = lambda: (self.port_A, self.port_B, self.port_C, self.port_D, self.motor_AB, self.led, 
+                                   self.current, self.voltage)
+        for num in range(0, 100):
+            devices = get_dev_set()
+            if all(devices):
+                log.debug("All devices are present: %s", devices)
+                return
+            log.debug("Waiting for builtin devices to appear: %s", devices)
+            time.sleep(0.1)
+        log.warning("Got only these devices: %s", get_dev_set())
+
+    def _report_status(self):
+        # maybe add firmware version
+        name = self.send(MsgHubProperties(MsgHubProperties.ADVERTISE_NAME, MsgHubProperties.UPD_REQUEST))
+        mac = self.send(MsgHubProperties(MsgHubProperties.PRIMARY_MAC, MsgHubProperties.UPD_REQUEST))
+        log.info("%s on %s", name.payload, str2hex(mac.payload))
+
+        voltage = self.send(MsgHubProperties(MsgHubProperties.VOLTAGE_PERC, MsgHubProperties.UPD_REQUEST))
+        assert isinstance(voltage, MsgHubProperties)
+        log.info("Voltage: %s%%", usbyte(voltage.parameters, 0))
+
+        voltage = self.send(MsgHubAlert(MsgHubAlert.LOW_VOLTAGE, MsgHubAlert.UPD_REQUEST))
+        assert isinstance(voltage, MsgHubAlert)
+        if not voltage.is_ok():
+            log.warning("Low voltage, check power source (maybe replace battery)")
+
+    # noinspection PyTypeChecker
+    def _handle_device_change(self, msg):
+        super(TechnicHub, self)._handle_device_change(msg)
+        if isinstance(msg, MsgHubAttachedIO) and msg.event != MsgHubAttachedIO.EVENT_DETACHED:
+            port = msg.port
+            if port == self.PORT_A:
+                self.port_A = self.peripherals[port]
+            elif port == self.PORT_B:
+                self.port_B = self.peripherals[port]
+            elif port == self.PORT_AB:
+                self.motor_AB = self.peripherals[port]
+            elif port == self.PORT_C:
+                self.port_C = self.peripherals[port]
+            elif port == self.PORT_D:
+                self.port_D = self.peripherals[port]
+            elif port == self.PORT_LED:
+                self.led = self.peripherals[port]
+            elif port == self.PORT_CURRENT:
+                self.current = self.peripherals[port]
+            elif port == self.PORT_VOLTAGE:
+                self.voltage = self.peripherals[port]
+
+            if type(self.peripherals[port]) == VisionSensor:
+                self.vision_sensor = self.peripherals[port]
